@@ -29,6 +29,7 @@ const
 type
   PMyRec = ^TMyRec;
   TMyRec = packed record
+    ID_INC: PtrInt;
     ID: PtrInt;
     Name: String;
   end;
@@ -76,6 +77,8 @@ type
       var NodeDataSize: Integer);
     procedure VST_fullGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
       Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
+    procedure VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
+      Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
     procedure VST_partialFreeNode(Sender: TBaseVirtualTree;
       Node: PVirtualNode);
     procedure VST_partialGetNodeDataSize(Sender: TBaseVirtualTree;
@@ -84,13 +87,14 @@ type
       Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType;
       var CellText: String);
   private
-
+    FNodesCnt: PtrInt;
   public
+    property NodesCnt: PtrInt read FNodesCnt;
     procedure FillTree;
   end;
 
 const
-  MinCount = 100000;
+  MinCount = 350000;
 var
   Form1: TForm1;
 
@@ -295,11 +299,13 @@ begin
 
   if not IBDatabase1.Connected then IBDatabase1.Connected:= True;
   ExecSQL:= TIBSQL.Create(Self);
+  MDS_full.Active:= True;
 
   try
     try
       startTick:= GetTickCount64;
       IBTransaction1.StartTransaction;
+
       with ExecSQL do
       begin
         SQL.Text:= 'SELECT ID, NAME FROM TEST';
@@ -307,11 +313,12 @@ begin
         Transaction:= IBTransaction1;
         ExecQuery;
 
-        MDS_partial.Clear(False);
+        MDS_full.Clear(False);
 
-        while not Eof do
+        //while not Eof do
+        while (RecordCount <= MinCount) do
         begin
-          MDS_partial.AppendRecord([FieldByName('ID').AsInteger,FieldByName('NAME').AsString]);
+          MDS_full.AppendRecord([nil,FieldByName('ID').AsInteger,FieldByName('NAME').AsString]);
           Next;
         end;
       end;
@@ -319,10 +326,11 @@ begin
 
       endTick:= GetTickCount64;
 
-      Caption:= Format('Execute time for selecting %d record is %d sec (Full Fetch)',
-                        [MDS_partial.RecordCount,(endTick - startTick) div 1000]);
+      StatusBar1.Panels[0].Text:= Format('Execute time for selecting %d record is %d sec (Full Fetch)',
+                        [MDS_full.RecordCount,(endTick - startTick) div 1000]);
+      StatusBar1.Panels[0].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[0].Text)
+                          + StatusBar1.Canvas.TextWidth('WW');
 
-      FillTree;
     except
       on E:Exception do
       begin
@@ -336,8 +344,24 @@ begin
     end;
   finally
     FreeAndNil(ExecSQL);
+
+    startTick:= GetTickCount64;
+    VST_full.BeginUpdate;
+    try
+      FNodesCnt:= 0;
+      VST_full.RootNodeCount:= MDS_full.RecordCount;
+    finally
+      VST_full.EndUpdate;
+      endTick:= GetTickCount64;
+    end;
+
     Button1.Enabled:= True;
     Button2.Enabled:= True;
+
+    StatusBar1.Panels[1].Text:= Format('Execute time for inserting to VST %d record is %d ms',
+                      [VST_full.RootNodeCount, endTick - startTick ]);
+    StatusBar1.Panels[1].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[1].Text)
+                        + StatusBar1.Canvas.TextWidth('WW');
   end;
 
 end;
@@ -440,6 +464,7 @@ begin
   MDS_partial.FieldDefs.Add('NAME',ftString,20);
   MDS_partial.Active:= True;
 
+  MDS_full.FieldDefs.Add('ID_INC',ftAutoInc);
   MDS_full.FieldDefs.Add('ID',ftInteger);
   MDS_full.FieldDefs.Add('NAME',ftString,20);
   MDS_full.Active:= True;
@@ -487,6 +512,23 @@ begin
   case Column of
     0: CellText:= IntToStr(NodeData^.ID);
     1: CellText:= NodeData^.Name;
+  end;
+end;
+
+procedure TForm1.VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
+  Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
+var
+  NodeData: PMyRec = nil;
+begin
+  if not Assigned(ParentNode) then
+  begin
+    Inc(FNodesCnt);
+    NodeData:= TBaseVirtualTree(Sender).GetNodeData(Node);
+    NodeData^.ID_INC:= NodesCnt;//service increment
+    MDS_full.RecNo:= NodesCnt;
+    NodeData^.ID:= MDS_full.FieldValues['ID'];
+    NodeData^.Name:= MDS_full.FieldValues['NAME'];
+    TBaseVirtualTree(Sender).AddChild(Node);
   end;
 end;
 
