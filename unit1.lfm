@@ -1,0 +1,206 @@
+object Form1: TForm1
+  Left = 319
+  Height = 286
+  Top = 31
+  Width = 791
+  Caption = 'Form1'
+  ClientHeight = 286
+  ClientWidth = 791
+  OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
+  object Button1: TButton
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = StatusBar1
+    Left = 706
+    Height = 25
+    Top = 228
+    Width = 75
+    Anchors = [akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Around = 10
+    Caption = 'Full fetch'
+    OnClick = Button1Click
+    TabOrder = 0
+  end
+  object Button3: TButton
+    AnchorSideLeft.Control = Owner
+    AnchorSideBottom.Control = StatusBar1
+    Left = 10
+    Height = 25
+    Top = 228
+    Width = 75
+    Anchors = [akLeft, akBottom]
+    BorderSpacing.Around = 10
+    Caption = 'goto RecNo'
+    OnClick = Button3Click
+    TabOrder = 1
+  end
+  object SpinEdit1: TSpinEdit
+    AnchorSideLeft.Control = Button3
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = Button3
+    AnchorSideTop.Side = asrCenter
+    Left = 95
+    Height = 23
+    Top = 229
+    Width = 81
+    BorderSpacing.Left = 10
+    MaxValue = 1000000
+    MinValue = 1
+    TabOrder = 2
+    Value = 1
+  end
+  object StatusBar1: TStatusBar
+    Left = 0
+    Height = 23
+    Top = 263
+    Width = 791
+    Panels = <    
+      item
+        Width = 50
+      end    
+      item
+        Width = 50
+      end>
+    SimplePanel = False
+  end
+  object VST_partial: TLazVirtualStringTree
+    AnchorSideLeft.Control = Owner
+    AnchorSideTop.Control = Owner
+    AnchorSideRight.Control = Splitter1
+    AnchorSideBottom.Control = Button1
+    Left = 10
+    Height = 208
+    Top = 10
+    Width = 373
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    BorderSpacing.Around = 10
+    DefaultText = 'Node'
+    Header.AutoSizeIndex = 1
+    Header.Columns = <    
+      item
+        Options = [coAllowClick, coEnabled, coParentBidiMode, coParentColor, coResizable, coShowDropMark, coVisible, coAutoSpring, coAllowFocus, coWrapCaption]
+        Position = 0
+        Text = 'ID'
+        Width = 148
+      end    
+      item
+        Color = clWindow
+        Options = [coAllowClick, coEnabled, coParentBidiMode, coResizable, coShowDropMark, coVisible, coAutoSpring, coSmartResize, coAllowFocus, coWrapCaption, coUseCaptionAlignment]
+        Position = 1
+        Text = 'Name'
+        Width = 225
+      end>
+    Header.Options = [hoAutoResize, hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible, hoAutoSpring]
+    TabOrder = 4
+    TreeOptions.AutoOptions = [toAutoScrollOnExpand, toAutoSort, toAutoSpanColumns, toAutoTristateTracking, toAutoDeleteMovedNodes, toAutoChangeScale]
+    TreeOptions.MiscOptions = [toFullRepaintOnResize, toGridExtensions, toInitOnSave, toToggleOnDblClick, toWheelPanning]
+    TreeOptions.PaintOptions = [toShowButtons, toShowDropmark, toShowHorzGridLines, toShowRoot, toShowTreeLines, toShowVertGridLines, toThemeAware, toUseBlendedImages]
+    TreeOptions.SelectionOptions = [toFullRowSelect]
+    OnFreeNode = VST_partialFreeNode
+    OnGetText = VST_partialGetText
+    OnGetNodeDataSize = VST_partialGetNodeDataSize
+  end
+  object VST_full: TLazVirtualStringTree
+    AnchorSideLeft.Control = Splitter1
+    AnchorSideLeft.Side = asrBottom
+    AnchorSideTop.Control = Owner
+    AnchorSideRight.Control = Owner
+    AnchorSideRight.Side = asrBottom
+    AnchorSideBottom.Control = Button1
+    Left = 408
+    Height = 208
+    Top = 10
+    Width = 373
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    BorderSpacing.Around = 10
+    DefaultText = 'Node'
+    Header.AutoSizeIndex = 1
+    Header.Columns = <    
+      item
+        Position = 0
+        Text = 'ID'
+        Width = 100
+      end    
+      item
+        Position = 1
+        Text = 'Name'
+        Width = 273
+      end>
+    Header.Options = [hoAutoResize, hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible, hoAutoSpring]
+    TabOrder = 6
+    TreeOptions.AutoOptions = [toAutoScrollOnExpand, toAutoSort, toAutoSpanColumns, toAutoTristateTracking, toAutoDeleteMovedNodes, toAutoChangeScale]
+    TreeOptions.MiscOptions = [toFullRepaintOnResize, toGridExtensions, toInitOnSave, toToggleOnDblClick, toWheelPanning]
+    TreeOptions.PaintOptions = [toShowButtons, toShowDropmark, toShowHorzGridLines, toShowRoot, toShowTreeLines, toShowVertGridLines, toThemeAware, toUseBlendedImages]
+    TreeOptions.SelectionOptions = [toFullRowSelect]
+    OnFreeNode = VST_fullFreeNode
+    OnGetText = VST_fullGetText
+    OnGetNodeDataSize = VST_fullGetNodeDataSize
+  end
+  object Button2: TButton
+    AnchorSideRight.Control = Button1
+    AnchorSideBottom.Control = StatusBar1
+    Left = 607
+    Height = 25
+    Top = 228
+    Width = 89
+    Anchors = [akRight, akBottom]
+    AutoSize = True
+    BorderSpacing.Around = 10
+    Caption = 'Partial fetch'
+    OnClick = Button2Click
+    TabOrder = 5
+  end
+  object Splitter1: TSplitter
+    AnchorSideTop.Control = VST_partial
+    AnchorSideBottom.Control = VST_partial
+    AnchorSideBottom.Side = asrBottom
+    Left = 393
+    Height = 208
+    Top = 10
+    Width = 5
+    Align = alNone
+    Anchors = [akTop, akBottom]
+  end
+  object IBDatabase1: TIBDatabase
+    Connected = False
+    LoginPrompt = False
+    CreateIfNotExists = False
+    AllowStreamedConnected = False
+    DefaultTransaction = IBTransaction1
+    IdleTimer = 0
+    TraceFlags = []
+    UseDefaultSystemCodePage = False
+    Left = 46
+    Top = 27
+  end
+  object IBTransaction1: TIBTransaction
+    TransactionName = '{ED0A0F4B-C197-4AAC-A550-ED92D45D7E63}'
+    Active = False
+    DefaultDatabase = IBDatabase1
+    Params.Strings = (
+      'read'
+      'read_committed'
+      'rec_version'
+      'nowait'
+    )
+    Left = 128
+    Top = 27
+  end
+  object MDS_partial: TMemDataset
+    FieldDefs = <>
+    Left = 100
+    Top = 114
+  end
+  object IBEvents1: TIBEvents
+    Registered = False
+    Left = 272
+    Top = 32
+  end
+  object MDS_full: TMemDataset
+    FieldDefs = <>
+    Left = 200
+    Top = 112
+  end
+end
