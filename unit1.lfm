@@ -7,6 +7,7 @@ object Form1: TForm1
   ClientHeight = 286
   ClientWidth = 791
   OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
   object Button1: TButton
     AnchorSideRight.Control = Owner
     AnchorSideRight.Side = asrBottom
@@ -89,7 +90,7 @@ object Form1: TForm1
         Options = [coAllowClick, coEnabled, coParentBidiMode, coResizable, coShowDropMark, coVisible, coAutoSpring, coSmartResize, coAllowFocus, coWrapCaption, coUseCaptionAlignment]
         Position = 1
         Text = 'Name'
-        Width = 221
+        Width = 225
       end>
     Header.Options = [hoAutoResize, hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible, hoAutoSpring]
     TabOrder = 4
@@ -100,6 +101,7 @@ object Form1: TForm1
     OnFreeNode = VST_partialFreeNode
     OnGetText = VST_partialGetText
     OnGetNodeDataSize = VST_partialGetNodeDataSize
+    OnInitNode = VST_partialInitNode
   end
   object VST_full: TLazVirtualStringTree
     AnchorSideLeft.Control = Splitter1
@@ -125,7 +127,7 @@ object Form1: TForm1
       item
         Position = 1
         Text = 'Name'
-        Width = 269
+        Width = 273
       end>
     Header.Options = [hoAutoResize, hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible, hoAutoSpring]
     TabOrder = 6
@@ -133,9 +135,12 @@ object Form1: TForm1
     TreeOptions.MiscOptions = [toFullRepaintOnResize, toGridExtensions, toInitOnSave, toToggleOnDblClick, toWheelPanning]
     TreeOptions.PaintOptions = [toShowButtons, toShowDropmark, toShowHorzGridLines, toShowRoot, toShowTreeLines, toShowVertGridLines, toThemeAware, toUseBlendedImages]
     TreeOptions.SelectionOptions = [toFullRowSelect]
+    OnClick = VST_fullClick
+    OnExpanding = VST_fullExpanding
     OnFreeNode = VST_fullFreeNode
     OnGetText = VST_fullGetText
     OnGetNodeDataSize = VST_fullGetNodeDataSize
+    OnInitChildren = VST_fullInitChildren
     OnInitNode = VST_fullInitNode
   end
   object Button2: TButton

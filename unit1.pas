@@ -72,11 +72,16 @@ type
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure VST_fullClick(Sender: TObject);
+    procedure VST_fullExpanding(Sender: TBaseVirtualTree; Node: PVirtualNode;
+      var Allowed: Boolean);
     procedure VST_fullFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
     procedure VST_fullGetNodeDataSize(Sender: TBaseVirtualTree;
       var NodeDataSize: Integer);
     procedure VST_fullGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
       Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
+    procedure VST_fullInitChildren(Sender: TBaseVirtualTree;
+      Node: PVirtualNode; var ChildCount: Cardinal);
     procedure VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
       Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
     procedure VST_partialFreeNode(Sender: TBaseVirtualTree;
@@ -86,6 +91,8 @@ type
     procedure VST_partialGetText(Sender: TBaseVirtualTree;
       Node: PVirtualNode; Column: TColumnIndex; TextType: TVSTTextType;
       var CellText: String);
+    procedure VST_partialInitNode(Sender: TBaseVirtualTree; ParentNode,
+      Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
   private
     FNodesCnt: PtrInt;
   public
@@ -291,9 +298,6 @@ var
   endTick: PtrInt = 0;
   i: Integer;
 begin
-  Button1.Enabled:= False;
-  Button2.Enabled:= False;
-
   for i:= 0 to Pred(StatusBar1.Panels.Count) do
     StatusBar1.Panels[i].Text:= '';
 
@@ -322,12 +326,14 @@ begin
           Next;
         end;
       end;
+
+
       IBTransaction1.Commit;
 
       endTick:= GetTickCount64;
 
-      StatusBar1.Panels[0].Text:= Format('Execute time for selecting %d record is %d sec (Full Fetch)',
-                        [MDS_full.RecordCount,(endTick - startTick) div 1000]);
+      StatusBar1.Panels[0].Text:= Format('Execute time for selecting %d record is %d ms',
+                        [MDS_full.RecordCount,(endTick - startTick)]);
       StatusBar1.Panels[0].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[0].Text)
                           + StatusBar1.Canvas.TextWidth('WW');
 
@@ -348,16 +354,13 @@ begin
     startTick:= GetTickCount64;
     VST_full.BeginUpdate;
     try
+      VST_full.Clear;
       FNodesCnt:= 0;
       VST_full.RootNodeCount:= MDS_full.RecordCount;
     finally
       VST_full.EndUpdate;
       endTick:= GetTickCount64;
     end;
-
-    Button1.Enabled:= True;
-    Button2.Enabled:= True;
-
     StatusBar1.Panels[1].Text:= Format('Execute time for inserting to VST %d record is %d ms',
                       [VST_full.RootNodeCount, endTick - startTick ]);
     StatusBar1.Panels[1].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[1].Text)
@@ -376,10 +379,6 @@ var
   rNode: PVirtualNode = nil;
   rNodeData: PMyRec = nil;
 begin
-  //Button2.Enabled:= False;
-  //Button1.Enabled:= False;
-  //VST_partial.Visible:= True;
-
   for i:= 0 to Pred(StatusBar1.Panels.Count) do
     StatusBar1.Panels[i].Text:= '';
 
@@ -395,22 +394,12 @@ begin
       ExecSQL.Database:= IBDatabase1;
       ExecSQL.Transaction:= IBTransaction1;
 
-      //ExecSQL.SQL.Text:= 'SELECT COUNT(ID) CNT FROM TEST';
-      //ExecSQL.ExecQuery;
-      //
-      //if (ExecSQL.FieldByName('CNT').AsInteger > MinCount) then
-      //begin
-      //  MyThread:= TMyThread.Create(True);
-      //  MyThread.Start;
-      //end;
-
       ExecSQL.SQL.Text:= 'SELECT ID, NAME FROM TEST';
       ExecSQL.ExecQuery;
 
       VST_partial.BeginUpdate;
       try
         VST_partial.Clear;
-        //while not Eof do
         while (ExecSQL.RecordCount < Succ(MinCount)) do
         begin
           rNode:= VST_partial.AddChild(nil);
@@ -426,13 +415,21 @@ begin
         VST_partial.AddToSelection(rNode);
         VST_partial.Expanded[rNode]:= False;
       end;
-
       endTick:= GetTickCount64;
 
       StatusBar1.Panels[0].Text:= Format('Executing time of inserting %d records into the VST_partial is %d msec',
                                     [MinCount, (endTick - startTick)]);
       StatusBar1.Panels[0].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[0].Text)
                         + StatusBar1.Canvas.TextWidth('W');
+
+
+
+      if (ExecSQL.FieldByName('CNT').AsInteger > MinCount) then
+      begin
+        MyThread:= TMyThread.Create(True);
+        MyThread.Start;
+      end;
+
       IBTransaction1.Commit;
     except
       on E:Exception do
@@ -479,8 +476,26 @@ begin
     Params.Add('lc_ctype=UTF8');
     LoginPrompt:= False;
   end;
+end;
 
-  //VST_partial.Anchors:= VST_partial.Anchors + [akRight];
+procedure TForm1.VST_fullClick(Sender: TObject);
+//var
+//  aNode: PVirtualNode = nil;
+begin
+  //aNode:= VST_full.GetNodeAt(Mouse.CursorPos);
+  //
+  //if Assigned(aNode) then
+  //  if ((vsHasChildren in aNode^.States) and (aNode^.ChildCount = 0)) then
+  //  begin
+  //    VST_full.AddChild(aNode);
+  //  end;
+end;
+
+procedure TForm1.VST_fullExpanding(Sender: TBaseVirtualTree;
+  Node: PVirtualNode; var Allowed: Boolean);
+begin
+  if (vsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
+  VST_full.AddChild(Node);
 end;
 
 procedure TForm1.VST_fullFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
@@ -504,32 +519,41 @@ end;
 
 procedure TForm1.VST_fullGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
   Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
-var
-  NodeData: PMyRec;
+//var
+  //NodeData: PMyRec = nil;
 begin
-  NodeData:= TBaseVirtualTree(Sender).GetNodeData(Node);
+  if ((vsHasChildren in Node^.States))
+  then
+    begin
+      //Inc(FNodesCnt);
+      //Caption:= IntToStr(NodesCnt);
+      MDS_full.RecNo:= Succ(Node^.Index);
+      case Column of
+        0: CellText:= MDS_full.Fields[1].AsString;
+        1: CellText:= MDS_full.Fields[2].AsString;
+      end;
+    end
+  //else
+  //  begin
+  //    NodeData:= VST_full.GetNodeData(Node);
+  //    case Column of
+  //      0: CellText:= IntToStr(NodeData^.ID);
+  //      1: CellText:= NodeData^.Name;
+  //    end;
+  //  end
+    ;
+end;
 
-  case Column of
-    0: CellText:= IntToStr(NodeData^.ID);
-    1: CellText:= NodeData^.Name;
-  end;
+procedure TForm1.VST_fullInitChildren(Sender: TBaseVirtualTree;
+  Node: PVirtualNode; var ChildCount: Cardinal);
+begin
+  //Node^.States:= Node^.States + [vsToggling];
 end;
 
 procedure TForm1.VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
   Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
-var
-  NodeData: PMyRec = nil;
 begin
-  if not Assigned(ParentNode) then
-  begin
-    Inc(FNodesCnt);
-    NodeData:= TBaseVirtualTree(Sender).GetNodeData(Node);
-    NodeData^.ID_INC:= NodesCnt;//service increment
-    MDS_full.RecNo:= NodesCnt;
-    NodeData^.ID:= MDS_full.FieldValues['ID'];
-    NodeData^.Name:= MDS_full.FieldValues['NAME'];
-    TBaseVirtualTree(Sender).AddChild(Node);
-  end;
+  if not Assigned(ParentNode) then InitialStates:= [ivsHasChildren];
 end;
 
 procedure TForm1.VST_partialFreeNode(Sender: TBaseVirtualTree;
@@ -558,12 +582,30 @@ procedure TForm1.VST_partialGetText(Sender: TBaseVirtualTree;
 var
   NodeData: PMyRec;
 begin
-  NodeData:= TBaseVirtualTree(Sender).GetNodeData(Node);
 
-  case Column of
-    0: CellText:= IntToStr(NodeData^.ID);
-    1: CellText:= NodeData^.Name;
-  end;
+  if (Node^.ChildCount > 0)
+  then
+    begin
+      MDS_partial.RecNo:= Succ(Node^.Index);
+      case Column of
+        0: CellText:= MDS_partial.Fields[1].AsString;
+        1: CellText:= MDS_partial.Fields[2].AsString;
+      end;
+    end
+  else
+    begin
+      NodeData:= VST_partial.GetNodeData(Node);
+      case Column of
+        0: CellText:= IntToStr(NodeData^.ID);
+        1: CellText:= NodeData^.Name;
+      end;
+    end;
+end;
+
+procedure TForm1.VST_partialInitNode(Sender: TBaseVirtualTree; ParentNode,
+  Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
+begin
+  if not Assigned(ParentNode) then VST_partial.AddChild(Node);
 end;
 
 procedure TForm1.FillTree;
