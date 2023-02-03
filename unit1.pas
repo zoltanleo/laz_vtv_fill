@@ -36,6 +36,15 @@ type
 
   TTreeSrc = (tsPartial, tsFull);
 
+  PParamRec = ^TParamRec;
+  TParamRec = packed record
+    ConnectStr: String;
+    LibraryName: String;
+    SQLText: String;
+    UsrName: String;
+    PassWD: String;
+  end;
+
   { TMyThread }
 
   TMyThread = class(TThread)
@@ -43,7 +52,7 @@ type
     Fdbase: TIBDataBase;
     FTrans: TIBTransaction;
     FexecSQL: TIBSQL;
-    //FMDS_thread: TMemDataset;
+    FprmRec: TParamRec;
     FStartTick: QWord;
     FEndTick: QWord;
     procedure FillExtVST;
@@ -51,7 +60,7 @@ type
   protected
     procedure Execute; override;
   public
-    constructor Create(CreateSuspended: Boolean);
+    constructor Create(CreateSuspended: Boolean; prmRec: PParamRec);
     destructor Destroy; override;
   published
   end;
@@ -63,20 +72,21 @@ type
     IBDatabase1: TIBDatabase;
     IBEvents1: TIBEvents;
     IBTransaction1: TIBTransaction;
-    VST_full: TLazVirtualStringTree;
+    VST: TLazVirtualStringTree;
     MDS_full: TMemDataset;
     MDS_partial: TMemDataset;
     StatusBar1: TStatusBar;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure VST_fullExpanding(Sender: TBaseVirtualTree; Node: PVirtualNode;
+    procedure MDS_partialFilterRecord(DataSet: TDataSet; var Accept: Boolean);
+    procedure VSTExpanding(Sender: TBaseVirtualTree; Node: PVirtualNode;
       var Allowed: Boolean);
-    procedure VST_fullFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
-    procedure VST_fullGetNodeDataSize(Sender: TBaseVirtualTree;
+    procedure VSTFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
+    procedure VSTGetNodeDataSize(Sender: TBaseVirtualTree;
       var NodeDataSize: Integer);
-    procedure VST_fullGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+    procedure VSTGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
       Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
-    procedure VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
+    procedure VSTInitNode(Sender: TBaseVirtualTree; ParentNode,
       Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
     procedure VST_partialFreeNode(Sender: TBaseVirtualTree;
       Node: PVirtualNode);
@@ -85,6 +95,7 @@ type
   private
     FTreeSrc: TTreeSrc;
   public
+    procedure InitMDS(Sender: TMemDataset);
     property TreeSrc: TTreeSrc read FTreeSrc write FTreeSrc;
   end;
 
@@ -108,18 +119,18 @@ begin
   begin
     startTick:= GetTickCount64;
     TreeSrc:= tsFull;
-    aNode:= VST_full.GetFirstSelected;
-    if not Assigned(aNode) then aNode:= VST_full.GetFirst;
+    aNode:= VST.GetFirstSelected;
+    if not Assigned(aNode) then aNode:= VST.GetFirst;
 
-    VST_full.BeginUpdate;
+    VST.BeginUpdate;
 
     try
-      VST_full.Clear;
-      VST_full.RootNodeCount:= MDS_full.RecordCount;
+      VST.Clear;
+      VST.RootNodeCount:= MDS_full.RecordCount;
     finally
-      VST_full.EndUpdate;
-      VST_full.ScrollIntoView(aNode,True);
-      VST_full.AddToSelection(aNode);
+      VST.EndUpdate;
+      VST.ScrollIntoView(aNode,True);
+      VST.AddToSelection(aNode);
     end;
 
     endTick:= GetTickCount64;
@@ -150,13 +161,12 @@ begin
     FTrans.StartTransaction;
     FexecSQL.ExecQuery;
 
-    Form1.MDS_full.Active:= True;
-    Form1.MDS_full.Clear(False);
+    Form1.InitMDS(Form1.MDS_full);
 
     while not FexecSQL.Eof do
     begin
       Form1.MDS_full.AppendRecord([
-      nil,
+      FexecSQL.RecordCount,
       FexecSQL.FieldByName('ID').AsInteger,
       FexecSQL.FieldByName('NAME').AsString
       ]);
@@ -180,7 +190,7 @@ begin
   end;
 end;
 
-constructor TMyThread.Create(CreateSuspended: Boolean);
+constructor TMyThread.Create(CreateSuspended: Boolean; prmRec: PParamRec);
 begin
   inherited Create(CreateSuspended);
 
@@ -189,17 +199,15 @@ begin
   Fdbase:= TIBDataBase.Create(nil);
   FTrans:= TIBTransaction.Create(nil);
   FexecSQL:= TIBSQL.Create(nil);
-  //FMDS_thread:= TMemDataset.Create(nil);
-  //FMDS_thread.FieldDefs.Add('ID',ftInteger);
-  //FMDS_thread.FieldDefs.Add('NAME',ftString,20);
+  FprmRec:= prmRec^;
 
   with Fdbase do
   begin
-    FirebirdLibraryPathName:= LibName;
-    DatabaseName:= ConnStr;
+    FirebirdLibraryPathName:= FprmRec.LibraryName;
+    DatabaseName:= FprmRec.ConnectStr;
     DefaultTransaction:=  FTrans;
-    Params.Add(Usr);
-    Params.Add(PWDStr);
+    Params.Add(FprmRec.UsrName);
+    Params.Add(FprmRec.PassWD);
     Params.Add('lc_ctype=UTF8');
     LoginPrompt:= False;
   end;
@@ -215,7 +223,7 @@ begin
 
   with FexecSQL do
   begin
-    SQL.Text:= 'SELECT ID, NAME FROM TEST';
+    SQL.Text:= prmRec^.SQLText;
     Database:= Fdbase;
     Transaction:= FTrans;
   end;
@@ -223,7 +231,6 @@ end;
 
 destructor TMyThread.Destroy;
 begin
-  //FMDS_thread.Free;
   FexecSQL.Free;
   FTrans.Free;
   Fdbase.Free;
@@ -239,6 +246,7 @@ var
   endTick: PtrInt = 0;
   i: Integer;
   MyThr: TMyThread = nil;
+  prmRec: TParamRec;
 begin
   for i:= 0 to Pred(StatusBar1.Panels.Count) do
     StatusBar1.Panels[i].Text:= '';
@@ -254,20 +262,22 @@ begin
 
       with ExecSQL do
       begin
-        SQL.Text:= 'SELECT ID, NAME FROM TEST';
+        SQL.Text:= 'SELECT ID, NAME FROM TEST WHERE (ID_PARENT = 0) ORDER BY ID';
         Database:= IBDatabase1;
         Transaction:= IBTransaction1;
         ExecQuery;
 
-        MDS_partial.Clear(False);
+        //MDS_partial.Clear(False);
+        InitMDS(MDS_partial);
 
         //while not Eof do
         while (RecordCount <= MinCount) do
         begin
-          MDS_partial.AppendRecord([nil, FieldByName('ID').AsInteger,FieldByName('NAME').AsString]);
+          MDS_partial.AppendRecord([RecordCount, FieldByName('ID').AsInteger,FieldByName('NAME').AsString]);
           Next;
         end;
       end;
+
 
       endTick:= GetTickCount64;
 
@@ -277,24 +287,34 @@ begin
                           + StatusBar1.Canvas.TextWidth('WW');
 
       startTick:= GetTickCount64;
-      VST_full.BeginUpdate;
+      VST.BeginUpdate;
       try
-        VST_full.Clear;
-        VST_full.RootNodeCount:= MDS_partial.RecordCount;
+        VST.Clear;
+        VST.RootNodeCount:= MDS_partial.RecordCount;
       finally
-        VST_full.EndUpdate;
+        VST.EndUpdate;
         endTick:= GetTickCount64;
       end;
+
       StatusBar1.Panels[1].Text:= Format('Execute time for inserting to VST %d record is %d ms',
-                        [VST_full.RootNodeCount, endTick - startTick ]);
+                        [VST.RootNodeCount, endTick - startTick ]);
       StatusBar1.Panels[1].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[1].Text)
                           + StatusBar1.Canvas.TextWidth('WW');
+
+      with prmRec do
+      begin
+        ConnectStr:= ConnStr;
+        LibraryName:= LibName;
+        UsrName:= Usr;
+        PassWD:= PWDStr;
+        SQLText:= ExecSQL.SQL.Text;
+      end;
 
       ExecSQL.SQL.Text:= 'SELECT COUNT (ID) CNT FROM TEST';
       ExecSQL.ExecQuery;
       if (ExecSQL.FieldByName('CNT').AsInteger > MinCount) then
       begin
-        MyThr:= TMyThread.Create(True);
+        MyThr:= TMyThread.Create(True,@prmRec);
         MyThr.Start;
       end;
 
@@ -319,15 +339,16 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   //uses DB
-  MDS_partial.FieldDefs.Add('SQC',ftAutoInc);
-  MDS_partial.FieldDefs.Add('ID',ftInteger);
-  MDS_partial.FieldDefs.Add('NAME',ftString,20);
-  MDS_partial.Active:= True;
-
-  MDS_full.FieldDefs.Add('SQC',ftAutoInc);
-  MDS_full.FieldDefs.Add('ID',ftInteger);
-  MDS_full.FieldDefs.Add('NAME',ftString,20);
-  MDS_full.Active:= True;
+  //MDS_partial.FieldDefs.Add('SQC',ftAutoInc);
+  //MDS_partial.FieldDefs.Add('ID',ftInteger);
+  //MDS_partial.FieldDefs.Add('NAME',ftString,20);
+  //MDS_partial.Active:= True;
+  //InitMDS(MDS_partial);
+  //InitMDS(MDS_full);
+  //MDS_full.FieldDefs.Add('SQC',ftAutoInc);
+  //MDS_full.FieldDefs.Add('ID',ftInteger);
+  //MDS_full.FieldDefs.Add('NAME',ftString,20);
+  //MDS_full.Active:= True;
 
   TreeSrc:= tsPartial;
 
@@ -342,14 +363,20 @@ begin
   end;
 end;
 
-procedure TForm1.VST_fullExpanding(Sender: TBaseVirtualTree;
+procedure TForm1.MDS_partialFilterRecord(DataSet: TDataSet; var Accept: Boolean
+  );
+begin
+  Accept:= (DataSet.Fields[1].AsInteger > 20) and (DataSet.Fields[1].AsInteger < 40);
+end;
+
+procedure TForm1.VSTExpanding(Sender: TBaseVirtualTree;
   Node: PVirtualNode; var Allowed: Boolean);
 begin
   if (vsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
-  VST_full.AddChild(Node);
+  VST.AddChild(Node);
 end;
 
-procedure TForm1.VST_fullFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
+procedure TForm1.VSTFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
 var
   NodeData: PMyRec;
 begin
@@ -362,13 +389,13 @@ begin
   end;
 end;
 
-procedure TForm1.VST_fullGetNodeDataSize(Sender: TBaseVirtualTree;
+procedure TForm1.VSTGetNodeDataSize(Sender: TBaseVirtualTree;
   var NodeDataSize: Integer);
 begin
   NodeDataSize:= SizeOf(TMyRec);
 end;
 
-procedure TForm1.VST_fullGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+procedure TForm1.VSTGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
   Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
 var
   MDS: TMemDataset = nil;
@@ -388,7 +415,7 @@ begin
     end
   //else
   //  begin
-  //    NodeData:= VST_full.GetNodeData(Node);
+  //    NodeData:= VST.GetNodeData(Node);
   //    case Column of
   //      0: CellText:= IntToStr(NodeData^.ID);
   //      1: CellText:= NodeData^.Name;
@@ -397,7 +424,7 @@ begin
     ;
 end;
 
-procedure TForm1.VST_fullInitNode(Sender: TBaseVirtualTree; ParentNode,
+procedure TForm1.VSTInitNode(Sender: TBaseVirtualTree; ParentNode,
   Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
 begin
   if not Assigned(ParentNode) then InitialStates:= [ivsHasChildren];
@@ -421,6 +448,20 @@ procedure TForm1.VST_partialGetNodeDataSize(Sender: TBaseVirtualTree;
   var NodeDataSize: Integer);
 begin
   NodeDataSize:= SizeOf(TMyRec);
+end;
+
+procedure TForm1.InitMDS(Sender: TMemDataset);
+begin
+  with TMemDataset(Sender) do
+  begin
+    if Active then Clear(True);
+    FieldDefs.Add('SQC',ftInteger);
+    FieldDefs.Add('ID',ftInteger);
+    FieldDefs.Add('NAME',ftString,20);
+    CreateTable;
+    Active:= True;
+    Filtered:= False;
+  end;
 end;
 
 end.
