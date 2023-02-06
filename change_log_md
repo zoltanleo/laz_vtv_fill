@@ -2,6 +2,12 @@
 
 --------
 
+v.0.0.3
+
+- implemented selection and display of child records for each node
+
+--------
+
 v.0.0.2
 - added `id_parent` field
 - removed several root entries to break the continuous `id` sequence

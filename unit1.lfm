@@ -7,6 +7,7 @@ object Form1: TForm1
   ClientHeight = 286
   ClientWidth = 722
   OnCreate = FormCreate
+  LCLVersion = '2.3.0.0'
   object Button1: TButton
     AnchorSideRight.Control = Owner
     AnchorSideRight.Side = asrBottom
@@ -59,7 +60,7 @@ object Form1: TForm1
       item
         Position = 1
         Text = 'Name'
-        Width = 598
+        Width = 602
       end>
     Header.Options = [hoAutoResize, hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible, hoAutoSpring]
     TabOrder = 2
@@ -67,6 +68,7 @@ object Form1: TForm1
     TreeOptions.MiscOptions = [toFullRepaintOnResize, toGridExtensions, toInitOnSave, toToggleOnDblClick, toWheelPanning]
     TreeOptions.PaintOptions = [toShowButtons, toShowDropmark, toShowHorzGridLines, toShowRoot, toShowTreeLines, toShowVertGridLines, toThemeAware, toUseBlendedImages]
     TreeOptions.SelectionOptions = [toFullRowSelect]
+    OnAddToSelection = VSTAddToSelection
     OnExpanding = VSTExpanding
     OnFreeNode = VSTFreeNode
     OnGetText = VSTGetText
@@ -98,9 +100,9 @@ object Form1: TForm1
     Left = 128
     Top = 27
   end
-  object MDS_partial: TMemDataset
+  object MDS_root_part: TMemDataset
     FieldDefs = <>
-    OnFilterRecord = MDS_partialFilterRecord
+    OnFilterRecord = MDS_root_partFilterRecord
     Left = 100
     Top = 114
   end
@@ -109,9 +111,14 @@ object Form1: TForm1
     Left = 272
     Top = 32
   end
-  object MDS_full: TMemDataset
+  object MDS_root_full: TMemDataset
     FieldDefs = <>
     Left = 200
+    Top = 114
+  end
+  object MDS_full: TMemDataset
+    FieldDefs = <>
+    Left = 296
     Top = 114
   end
 end

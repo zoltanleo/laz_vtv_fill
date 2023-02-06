@@ -26,10 +26,12 @@ const
     {$ENDIF}
   {$ENDIF}
 
+  DataLoadingMsg = 'Data is loading, please wait...';
+  NoChildRecords = 'Node has no children';
+
 type
   PMyRec = ^TMyRec;
   TMyRec = packed record
-    ID_INC: PtrInt;
     ID: PtrInt;
     Name: String;
   end;
@@ -72,13 +74,15 @@ type
     IBDatabase1: TIBDatabase;
     IBEvents1: TIBEvents;
     IBTransaction1: TIBTransaction;
-    VST: TLazVirtualStringTree;
     MDS_full: TMemDataset;
-    MDS_partial: TMemDataset;
+    VST: TLazVirtualStringTree;
+    MDS_root_full: TMemDataset;
+    MDS_root_part: TMemDataset;
     StatusBar1: TStatusBar;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
-    procedure MDS_partialFilterRecord(DataSet: TDataSet; var Accept: Boolean);
+    procedure MDS_root_partFilterRecord(DataSet: TDataSet; var Accept: Boolean);
+    procedure VSTAddToSelection(Sender: TBaseVirtualTree; Node: PVirtualNode);
     procedure VSTExpanding(Sender: TBaseVirtualTree; Node: PVirtualNode;
       var Allowed: Boolean);
     procedure VSTFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
@@ -94,6 +98,7 @@ type
       var NodeDataSize: Integer);
   private
     FTreeSrc: TTreeSrc;
+    FMyThr: TMyThread;
   public
     procedure InitMDS(Sender: TMemDataset);
     property TreeSrc: TTreeSrc read FTreeSrc write FTreeSrc;
@@ -126,7 +131,7 @@ begin
 
     try
       VST.Clear;
-      VST.RootNodeCount:= MDS_full.RecordCount;
+      VST.RootNodeCount:= MDS_root_full.RecordCount;
     finally
       VST.EndUpdate;
       VST.ScrollIntoView(aNode,True);
@@ -135,8 +140,8 @@ begin
 
     endTick:= GetTickCount64;
 
-    StatusBar1.Panels[1].Text:= Format('Executing time of inserting %d records into the VST_full is %d msec',
-                                       [MDS_full.RecordCount,(endTick - startTick)]);
+    StatusBar1.Panels[1].Text:= Format('Executing time of inserting %d records into the VST is %d msec',
+                                       [MDS_root_full.RecordCount,(endTick - startTick)]);
     StatusBar1.Panels[1].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[1].Text)
                         + StatusBar1.Canvas.TextWidth('W');
   end;
@@ -159,6 +164,8 @@ begin
     if not Fdbase.Connected then Fdbase.Connected:= True;
     FStartTick:= GetTickCount64;
     FTrans.StartTransaction;
+
+    //get all records
     FexecSQL.ExecQuery;
 
     Form1.InitMDS(Form1.MDS_full);
@@ -166,11 +173,32 @@ begin
     while not FexecSQL.Eof do
     begin
       Form1.MDS_full.AppendRecord([
-      FexecSQL.RecordCount,
-      FexecSQL.FieldByName('ID').AsInteger,
-      FexecSQL.FieldByName('NAME').AsString
+      //FexecSQL.FieldByName('ID').AsInteger,
+      //FexecSQL.FieldByName('NAME').AsString,
+      //FexecSQL.FieldByName('ID_PARENT').AsString,
+      FexecSQL.Fields[0].AsInteger,
+      FexecSQL.Fields[1].AsString,
+      FexecSQL.Fields[2].AsString
       ]);
       FexecSQL.Next;
+    end;
+
+    //get all root records only
+    with Form1 do
+    begin
+      InitMDS(MDS_root_full);
+      MDS_full.First;
+
+      while not MDS_full.EOF do
+      begin
+        if (MDS_full.Fields[2].AsInteger = 0) then
+          MDS_root_full.AppendRecord([
+                      MDS_full.Fields[0].AsInteger,//ID
+                      MDS_full.Fields[1].AsString,//NAME
+                      MDS_full.Fields[2].AsInteger//ID_PARENT
+                                      ]);
+        MDS_full.Next;
+      end;
     end;
 
     FEndTick:= GetTickCount64;
@@ -223,9 +251,9 @@ begin
 
   with FexecSQL do
   begin
-    SQL.Text:= prmRec^.SQLText;
     Database:= Fdbase;
     Transaction:= FTrans;
+    SQL.Text:= FprmRec.SQLText;
   end;
 end;
 
@@ -242,10 +270,11 @@ end;
 procedure TForm1.Button1Click(Sender: TObject);
 var
   ExecSQL: TIBSQL = Nil;
+  ChExecSQL: TIBSQL = nil;
   startTick: PtrInt = 0;
   endTick: PtrInt = 0;
   i: Integer;
-  MyThr: TMyThread = nil;
+  //MyThr: TMyThread = nil;
   prmRec: TParamRec;
 begin
   for i:= 0 to Pred(StatusBar1.Panels.Count) do
@@ -253,7 +282,8 @@ begin
 
   if not IBDatabase1.Connected then IBDatabase1.Connected:= True;
   ExecSQL:= TIBSQL.Create(Self);
-  MDS_partial.Active:= True;
+  ChExecSQL:= TIBSQL.Create(Self);
+  MDS_root_part.Active:= True;
   TreeSrc:= tsPartial;
   try
     try
@@ -262,27 +292,29 @@ begin
 
       with ExecSQL do
       begin
-        SQL.Text:= 'SELECT ID, NAME FROM TEST WHERE (ID_PARENT = 0) ORDER BY ID';
+        SQL.Text:= 'SELECT ID, NAME, ID_PARENT FROM TEST WHERE (ID_PARENT = 0) ORDER BY ID';
         Database:= IBDatabase1;
         Transaction:= IBTransaction1;
         ExecQuery;
-
-        //MDS_partial.Clear(False);
-        InitMDS(MDS_partial);
-
-        //while not Eof do
-        while (RecordCount <= MinCount) do
-        begin
-          MDS_partial.AppendRecord([RecordCount, FieldByName('ID').AsInteger,FieldByName('NAME').AsString]);
-          Next;
-        end;
       end;
+        InitMDS(MDS_root_part);
 
+        i:= 0;
+        //while not Eof do
+        while (ExecSQL.RecordCount <= MinCount) do
+        begin
+          Inc(i);
+          MDS_root_part.AppendRecord([
+                                  ExecSQL.FieldByName('ID').AsInteger,
+                                  ExecSQL.FieldByName('NAME').AsString
+                                  ]);
+          ExecSQL.Next;
+        end;
 
       endTick:= GetTickCount64;
 
       StatusBar1.Panels[0].Text:= Format('Execute time for selecting %d record is %d ms',
-                        [MDS_partial.RecordCount,(endTick - startTick)]);
+                        [MDS_root_part.RecordCount,(endTick - startTick)]);
       StatusBar1.Panels[0].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[0].Text)
                           + StatusBar1.Canvas.TextWidth('WW');
 
@@ -290,7 +322,7 @@ begin
       VST.BeginUpdate;
       try
         VST.Clear;
-        VST.RootNodeCount:= MDS_partial.RecordCount;
+        VST.RootNodeCount:= MDS_root_part.RecordCount;
       finally
         VST.EndUpdate;
         endTick:= GetTickCount64;
@@ -301,21 +333,23 @@ begin
       StatusBar1.Panels[1].Width:= StatusBar1.Canvas.TextWidth(StatusBar1.Panels[1].Text)
                           + StatusBar1.Canvas.TextWidth('WW');
 
-      with prmRec do
-      begin
-        ConnectStr:= ConnStr;
-        LibraryName:= LibName;
-        UsrName:= Usr;
-        PassWD:= PWDStr;
-        SQLText:= ExecSQL.SQL.Text;
-      end;
+
 
       ExecSQL.SQL.Text:= 'SELECT COUNT (ID) CNT FROM TEST';
       ExecSQL.ExecQuery;
       if (ExecSQL.FieldByName('CNT').AsInteger > MinCount) then
       begin
-        MyThr:= TMyThread.Create(True,@prmRec);
-        MyThr.Start;
+        with prmRec do
+        begin
+          ConnectStr:= ConnStr;
+          LibraryName:= LibName;
+          UsrName:= Usr;
+          PassWD:= PWDStr;
+          SQLText:= 'SELECT ID, NAME, ID_PARENT FROM TEST ORDER BY ID';
+        end;
+
+        FMyThr:= TMyThread.Create(True,@prmRec);
+        FMyThr.Start;
       end;
 
       IBTransaction1.Commit;
@@ -331,6 +365,7 @@ begin
       end;
     end;
   finally
+    FreeAndNil(ChExecSQL);
     FreeAndNil(ExecSQL);
   end;
 
@@ -338,19 +373,8 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  //uses DB
-  //MDS_partial.FieldDefs.Add('SQC',ftAutoInc);
-  //MDS_partial.FieldDefs.Add('ID',ftInteger);
-  //MDS_partial.FieldDefs.Add('NAME',ftString,20);
-  //MDS_partial.Active:= True;
-  //InitMDS(MDS_partial);
-  //InitMDS(MDS_full);
-  //MDS_full.FieldDefs.Add('SQC',ftAutoInc);
-  //MDS_full.FieldDefs.Add('ID',ftInteger);
-  //MDS_full.FieldDefs.Add('NAME',ftString,20);
-  //MDS_full.Active:= True;
-
   TreeSrc:= tsPartial;
+  FMyThr:= nil;
 
   with IBDatabase1 do
   begin
@@ -363,17 +387,64 @@ begin
   end;
 end;
 
-procedure TForm1.MDS_partialFilterRecord(DataSet: TDataSet; var Accept: Boolean
+procedure TForm1.MDS_root_partFilterRecord(DataSet: TDataSet; var Accept: Boolean
   );
 begin
-  Accept:= (DataSet.Fields[1].AsInteger > 20) and (DataSet.Fields[1].AsInteger < 40);
+  //Accept:= (DataSet.Fields[1].AsInteger > 20) and (DataSet.Fields[1].AsInteger < 40);
+end;
+
+procedure TForm1.VSTAddToSelection(Sender: TBaseVirtualTree; Node: PVirtualNode
+  );
+begin
+  Caption:= 'Parent.Index = ' + IntToStr((Node^.Parent)^.Index);
 end;
 
 procedure TForm1.VSTExpanding(Sender: TBaseVirtualTree;
   Node: PVirtualNode; var Allowed: Boolean);
+var
+  ChNode: PVirtualNode = nil;
+  NodeData: PMyRec = nil;
+  ParentID: PtrInt = 0;
 begin
-  if (vsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
-  VST.AddChild(Node);
+  if (Node^.ChildCount > 0) then VST.DeleteChildren(Node);
+
+  case TreeSrc of
+    tsPartial:
+      begin
+        ChNode:= VST.AddChild(Node);
+        NodeData:= VST.GetNodeData(ChNode);
+        NodeData^.ID:= 0;
+        NodeData^.Name:= DataLoadingMsg;
+      end;
+    tsFull:
+      begin
+        NodeData:= VST.GetNodeData(Node);
+        ParentID:= NodeData^.ID;//get ID of Parent Node
+
+        MDS_full.First;
+        while not MDS_full.EOF do
+        begin
+          if (MDS_full.Fields[2].AsInteger = ParentID) then
+          begin
+            ChNode:= VST.AddChild(Node);
+            NodeData:= VST.GetNodeData(ChNode);
+            NodeData^.ID:= MDS_full.Fields[0].AsInteger;
+            NodeData^.Name:= MDS_full.Fields[1].AsString;
+          end;
+          MDS_full.Next;
+        end;
+
+        if (Node^.ChildCount = 0) then
+        begin
+          ChNode:= VST.AddChild(Node);
+          NodeData:= VST.GetNodeData(ChNode);
+          NodeData^.ID:= 0;
+          NodeData^.Name:= NoChildRecords;
+        end;
+      end;
+  end;
+  //if (vsHasChildren in Node^.States) and (Node^.ChildCount = 0) then
+  //VST.AddChild(Node);
 end;
 
 procedure TForm1.VSTFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
@@ -399,28 +470,33 @@ procedure TForm1.VSTGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
   Column: TColumnIndex; TextType: TVSTTextType; var CellText: String);
 var
   MDS: TMemDataset = nil;
+  NodeData: PMyRec = nil;
 begin
   case TreeSrc of
-    tsPartial: MDS:= MDS_partial;
-    tsFull: MDS:= MDS_full;
+    tsPartial: MDS:= MDS_root_part;
+    tsFull: MDS:= MDS_root_full;
   end;
 
-  if ((vsHasChildren in Node^.States)) then
+  if (vsHasChildren in Node^.States) then
     begin
       MDS.RecNo:= Succ(Node^.Index);
+
+      NodeData:= VST.GetNodeData(Node);
+      NodeData^.ID:= MDS.Fields[0].AsInteger;
+
       case Column of
-        0: CellText:= MDS.Fields[1].AsString;
-        1: CellText:= MDS.Fields[2].AsString;
+        0: CellText:= IntToStr(NodeData^.ID);//CellText:= MDS.Fields[0].AsString;
+        1: CellText:= MDS.Fields[1].AsString;
       end;
     end
-  //else
-  //  begin
-  //    NodeData:= VST.GetNodeData(Node);
-  //    case Column of
-  //      0: CellText:= IntToStr(NodeData^.ID);
-  //      1: CellText:= NodeData^.Name;
-  //    end;
-  //  end
+  else
+    begin
+      NodeData:= VST.GetNodeData(Node);
+      case Column of
+        0: CellText:= IntToStr(NodeData^.ID);
+        1: CellText:= NodeData^.Name;
+      end;
+    end
     ;
 end;
 
@@ -455,9 +531,9 @@ begin
   with TMemDataset(Sender) do
   begin
     if Active then Clear(True);
-    FieldDefs.Add('SQC',ftInteger);
     FieldDefs.Add('ID',ftInteger);
     FieldDefs.Add('NAME',ftString,20);
+    FieldDefs.Add('ID_PARENT',ftInteger);
     CreateTable;
     Active:= True;
     Filtered:= False;
