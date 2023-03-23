@@ -7,7 +7,8 @@ interface
 uses
   Classes, SysUtils, memds, DB, Forms, Controls, Graphics, Dialogs, StdCtrls,
   DBGrids, ComCtrls, ExtCtrls, laz.VirtualTrees, LazUTF8, IBDatabase,
-  IBSQL, IBEvents;
+  IBSQL, IBEvents
+  ;
 
 const
 
