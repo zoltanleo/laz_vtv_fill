@@ -3,6 +3,12 @@
 
 --------
 
+v.0.0.6
+
+- removed the fork of ibx components by Rik (aka Yury Kopnin)
+
+--------
+
 v.0.0.5
 
 - added the fork of ibx components by Rik (aka Yury Kopnin)

@@ -18,7 +18,7 @@
         <ResourceBaseClass Value="Form"/>
         <UnitName Value="Unit1"/>
         <IsVisibleTab Value="True"/>
-        <TopLine Value="12"/>
+        <TopLine Value="15"/>
         <CursorPos Y="11"/>
         <UsageCount Value="60"/>
         <Bookmarks Count="10">
