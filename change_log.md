@@ -1,5 +1,12 @@
 ### A test project to study the speed of fetching data from a database and populating a tree with this data
 
+
+--------
+
+v.0.0.5
+
+- added the fork of ibx components by Rik (aka Yury Kopnin)
+
 --------
 
 v.0.0.4
